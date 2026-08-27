@@ -1,0 +1,4 @@
+
+import {createClient} from "@supabase/supabase-js";import {notFound} from "next/navigation";
+function md(s:string){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/^# (.*)$/gm,"<h1>$1</h1>").replace(/^## (.*)$/gm,"<h2>$1</h2>").replace(/^### (.*)$/gm,"<h3>$1</h3>").replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>").replace(/\n\n/g,"<p></p>").replace(/\n/g,"<br/>")}
+export default async function Shared({params}:{params:{id:string}}){const u=process.env.NEXT_PUBLIC_SUPABASE_URL,k=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;if(!u||!k)notFound();const db=createClient(u,k),{data}=await db.from("reports").select("report").eq("id",params.id).single();if(!data)notFound();return <main style={{minHeight:"100vh",background:"#f6f2ee",padding:"50px 20px",color:"#191618"}}><article style={{maxWidth:790,margin:"auto",fontFamily:"system-ui",lineHeight:1.8}} dangerouslySetInnerHTML={{__html:md(data.report)}}/></main>}

@@ -1,0 +1,3 @@
+
+import {NextResponse} from "next/server";import {createClient} from "@supabase/supabase-js";
+export async function POST(req:Request){const url=process.env.NEXT_PUBLIC_SUPABASE_URL,key=process.env.SUPABASE_SERVICE_ROLE_KEY;if(!url||!key)return NextResponse.json({error:"Supabase non configuré."},{status:501});const b=await req.json();if(!b.report)return NextResponse.json({error:"Rapport manquant."},{status:400});const db=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});const {data,error}=await db.from("reports").insert({report:b.report,analysis:b.analysis??null,stats:b.stats??null}).select("id").single();if(error)return NextResponse.json({error:error.message},{status:500});return NextResponse.json({id:data.id})}
