@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import JSZip from "jszip";
 import { analyzeConversation } from "./lib/analyzer";
+import { importConversationFile } from "./lib/importers/importer";
 
 type Message = {
   date: string;
@@ -11,6 +11,9 @@ type Message = {
   isForwarded?: boolean;
   isQuoted?: boolean;
   originalSender?: string;
+  platform?: "whatsapp" | "snapchat" | "instagram" | "telegram";
+  conversation?: string;
+  attachment?: boolean;
 };
 
 type RelationshipType = "amour" | "famille" | "amis" | "travail";
@@ -249,6 +252,9 @@ export default function Home() {
   const [error, setError] = useState("");
   const [relationshipType, setRelationshipType] =
     useState<RelationshipType>("amour");
+  const [platform, setPlatform] = useState<
+    "whatsapp" | "snapchat" | "instagram" | "telegram" | null
+  >(null);
 
   const senders = useMemo(
     () => [...new Set(messages.map((m) => m.sender))].slice(0, 2),
@@ -273,36 +279,40 @@ export default function Home() {
     setReport("");
     setData(null);
     setProgress(0);
+    setPlatform(null);
 
     try {
-      let text = "";
+      const imported = await importConversationFile(f);
 
-      if (f.name.toLowerCase().endsWith(".zip")) {
-        const z = await JSZip.loadAsync(f);
-
-        for (const n of Object.keys(z.files)) {
-          if (!z.files[n].dir && n.toLowerCase().endsWith(".txt")) {
-            const t = await z.files[n].async("text");
-            if (t.length > text.length) text = t;
-          }
-        }
-      } else {
-        text = await f.text();
+      if (imported.messages.length < 20) {
+        throw new Error(
+          "Pas assez de messages exploitables dans cet export."
+        );
       }
 
-      const parsed = parseWhatsApp(text);
+      const normalizedMessages: Message[] = imported.messages.map((m) => ({
+        date: m.date,
+        sender: m.sender,
+        text: m.text,
+        platform: m.platform,
+        conversation: m.conversation,
+        attachment: m.attachment,
+      }));
 
-      if (parsed.length < 20) {
-        throw new Error("Format WhatsApp non reconnu.");
-      }
+      const enriched = enrichMessages(normalizedMessages);
 
-      const enriched = enrichMessages(parsed);
       setMessages(enriched);
+      setPlatform(imported.platform);
       setProgress(18);
+
+      if (imported.warnings.length) {
+        console.warn("Import warnings:", imported.warnings);
+      }
     } catch (e: any) {
       setFile(null);
       setMessages([]);
-      setError(e?.message || "Impossible de lire le fichier.");
+      setPlatform(null);
+      setError(e?.message || "Impossible de lire cet export.");
       setProgress(0);
     }
   }
@@ -490,10 +500,10 @@ export default function Home() {
             <label className="drop" htmlFor="f">
               <div className="uploadIcon">↑</div>
 
-              <b>Déposez votre export WhatsApp</b>
+              <b>Déposez votre export</b>
 
               <span>
-                ZIP ou TXT · glissez-déposez ou{" "}
+                WhatsApp, Snapchat, Instagram ou Telegram · ZIP, TXT ou JSON ·{" "}
                 <u>choisissez un fichier</u>
               </span>
 
@@ -505,7 +515,7 @@ export default function Home() {
                 id="f"
                 hidden
                 type="file"
-                accept=".zip,.txt"
+                accept=".zip,.txt,.json"
                 onChange={(e) => {
                   const selected = e.target.files?.[0];
                   if (selected) load(selected);
