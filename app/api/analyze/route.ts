@@ -832,16 +832,27 @@ en déclaration personnelle de son expéditeur.
       relationshipType,
       evidence: evidence.slice(0, 120),
     });
-  } catch (error: any) {
-    console.error("GEMINI ERROR:", error);
+} catch (error: any) {
+  console.error("GEMINI ERROR:", error);
 
+  if (error?.status === 429) {
     return NextResponse.json(
       {
         error:
-          error?.message ||
-          "Erreur pendant l'analyse Gemini.",
+          "🩺 Jean-Michel a fini sa garde pour aujourd'hui. Le quota gratuit d'analyse est épuisé. Reviens demain !",
+        code: "QUOTA_EXCEEDED",
       },
-      { status: 500 }
+      { status: 429 }
     );
   }
+
+  return NextResponse.json(
+    {
+      error:
+        error?.message ||
+        "Une erreur est survenue pendant l'analyse de la conversation.",
+    },
+    { status: 500 }
+  );
+}
 }
