@@ -547,12 +547,16 @@ export default function Home() {
             <label className="drop" htmlFor="f">
               <div className="uploadIcon">↑</div>
 
-              <b>Déposez votre export WhatsApp</b>
+<b>Déposez votre export de conversation</b>
 
-              <span>
-                ZIP ou TXT · glissez-déposez ou{" "}
-                <u>choisissez un fichier</u>
-              </span>
+<span>
+  WhatsApp · Snapchat · Instagram · Telegram
+</span>
+
+<span>
+  ZIP, TXT ou JSON · glissez-déposez ou{" "}
+  <u>choisissez un fichier</u>
+</span>
 
               <small>
                 ⌁ Analyse locale avant envoi des éléments nécessaires à l'IA
