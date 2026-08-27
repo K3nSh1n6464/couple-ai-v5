@@ -44,7 +44,24 @@ async function analystCall(ai: GoogleGenAI, prompt: string) {
     },
   });
 
-  return JSON.parse(r.text || "{}");
+  const raw = r.text || "";
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const cleaned = raw
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+    try {
+      return JSON.parse(cleaned);
+    } catch {
+      console.error("GEMINI JSON INVALID:", raw);
+      throw new Error("Gemini a renvoyé une réponse JSON invalide.");
+    }
+  }
 }
 
 export async function POST(req:Request){
