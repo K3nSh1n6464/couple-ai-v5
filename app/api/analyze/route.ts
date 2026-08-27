@@ -32,9 +32,19 @@ Introduction
 ## 🏆 Le verdict de Brandon
 Verdict = exactement 5 points. Dernière phrase mémorable.`;
 
-async function analystCall(ai:GoogleGenAI,prompt:string){
-  const r=await ai.models.generateContent({model:"gemini-3.6-flash",contents:prompt,config:{systemInstruction:analyst,temperature:.62,maxOutputTokens:9000,responseFormat:{text:{mimeType:"application/json",schema}}}});
-  return JSON.parse(r.text||"{}");
+async function analystCall(ai: GoogleGenAI, prompt: string) {
+  const r = await ai.models.generateContent({
+    model: "gemini-3.6-flash",
+    contents: prompt,
+    config: {
+      systemInstruction: analyst,
+      temperature: 0.62,
+      maxOutputTokens: 9000,
+      responseMimeType: "application/json",
+    },
+  });
+
+  return JSON.parse(r.text || "{}");
 }
 
 export async function POST(req:Request){
