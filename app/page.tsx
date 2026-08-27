@@ -248,6 +248,7 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
+  const [quotaModal, setQuotaModal] = useState(false);
   const [relationshipType, setRelationshipType] =
     useState<RelationshipType>("amour");
 
@@ -342,6 +343,12 @@ export default function Home() {
       const d = await r.json();
 
       if (!r.ok) {
+        if (r.status === 429 || d?.code === "QUOTA_EXCEEDED") {
+          setQuotaModal(true);
+          setError("");
+          return;
+        }
+
         throw new Error(
           d?.error || "Erreur pendant l'analyse."
         );
@@ -426,6 +433,55 @@ export default function Home() {
 
   return (
     <main className="site">
+      {quotaModal && (
+        <div
+          className="quotaModalBackdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="quota-title"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setQuotaModal(false);
+          }}
+        >
+          <div className="quotaModal">
+            <button
+              type="button"
+              className="quotaModalClose"
+              aria-label="Fermer"
+              onClick={() => setQuotaModal(false)}
+            >
+              ×
+            </button>
+
+            <div className="quotaModalIcon">🩺</div>
+
+            <div className="sectionKicker">GARDE TERMINÉE</div>
+
+            <h2 id="quota-title">
+              Jean-Michel a fini sa garde.
+            </h2>
+
+            <p>
+              Le quota gratuit d'analyse est épuisé pour aujourd'hui.
+              Reviens demain pour lui confier une nouvelle conversation.
+            </p>
+
+            <div className="quotaModalTip">
+              <strong>Pas d'inquiétude.</strong>
+              {" "}Ton fichier n'est pas perdu : tu peux fermer ce message
+              et garder la page ouverte.
+            </div>
+
+            <button
+              type="button"
+              className="quotaModalButton"
+              onClick={() => setQuotaModal(false)}
+            >
+              Compris
+            </button>
+          </div>
+        </div>
+      )}
       <nav className="nav">
         <div className="brand">
           <span className="mark">✦</span>

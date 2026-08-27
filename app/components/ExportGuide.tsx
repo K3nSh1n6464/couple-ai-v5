@@ -21,8 +21,8 @@ const guides: Record<
     format: "TXT ou ZIP",
     title: "Exporter une conversation WhatsApp",
     steps: [
-      "Ouvrez la conversation à analyser.",
-      "Ouvrez le menu de la conversation puis choisissez « Exporter discussion ».",
+      "Ouvrez la conversation à analyser et cliquez sur les 3 points en haut à droite.",
+      "Choisissez Plus puis « Exporter discussion ».",
       "Choisissez « Sans médias » : nous avons besoin du texte, pas des photos et vidéos.",
       "Enregistrez ou envoyez le fichier .txt ou .zip obtenu.",
       "Déposez ensuite ce fichier dans la zone d'analyse ci-dessus.",

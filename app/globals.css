@@ -582,3 +582,147 @@
     font-size:16px;
   }
 }
+
+
+/* =========================================================
+   GEMINI QUOTA MODAL
+   ========================================================= */
+
+.quotaModalBackdrop{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:22px;
+  background:rgba(35,27,30,.48);
+  backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);
+  animation:quotaFadeIn .18s ease;
+}
+
+.quotaModal{
+  position:relative;
+  width:min(100%, 440px);
+  padding:34px 32px 30px;
+  border:1px solid #eadde0;
+  border-radius:24px;
+  background:#fffdfc;
+  color:var(--ink);
+  text-align:center;
+  box-shadow:0 28px 80px rgba(35,27,30,.22);
+  animation:quotaPopIn .2s ease;
+}
+
+.quotaModalIcon{
+  width:64px;
+  height:64px;
+  margin:0 auto 17px;
+  display:grid;
+  place-items:center;
+  border-radius:20px;
+  background:#f5e8ea;
+  font-size:30px;
+}
+
+.quotaModal .sectionKicker{
+  margin:0 0 8px;
+  color:#9b6077;
+  font-size:9px;
+  letter-spacing:.14em;
+}
+
+.quotaModal h2{
+  margin:0;
+  font-family:"DM Sans",system-ui,sans-serif;
+  font-size:25px;
+  line-height:1.1;
+  letter-spacing:-.035em;
+}
+
+.quotaModal > p{
+  margin:14px auto 0;
+  max-width:350px;
+  color:#6f6569;
+  font-size:13px;
+  line-height:1.65;
+}
+
+.quotaModalTip{
+  margin:20px 0;
+  padding:12px 14px;
+  border:1px solid #eadde0;
+  border-radius:13px;
+  background:#fbf5f6;
+  color:#7d7175;
+  font-size:10px;
+  line-height:1.5;
+  text-align:left;
+}
+
+.quotaModalTip strong{
+  color:#9b6077;
+}
+
+.quotaModalButton{
+  width:100%;
+  min-height:45px;
+  border:0;
+  border-radius:12px;
+  background:#9b6077;
+  color:#fff;
+  font:700 12px "DM Sans",system-ui,sans-serif;
+  cursor:pointer;
+  transition:transform .15s ease, opacity .15s ease;
+}
+
+.quotaModalButton:hover{
+  transform:translateY(-1px);
+  opacity:.92;
+}
+
+.quotaModalClose{
+  position:absolute;
+  top:12px;
+  right:14px;
+  width:32px;
+  height:32px;
+  border:0;
+  border-radius:50%;
+  background:transparent;
+  color:#8a8184;
+  font-size:25px;
+  line-height:1;
+  cursor:pointer;
+}
+
+.quotaModalClose:hover{
+  background:#f5edef;
+  color:#6f6569;
+}
+
+@keyframes quotaFadeIn{
+  from{opacity:0}
+  to{opacity:1}
+}
+
+@keyframes quotaPopIn{
+  from{opacity:0;transform:translateY(8px) scale(.98)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+
+@media(max-width:500px){
+  .quotaModal{
+    padding:29px 21px 22px;
+    border-radius:20px;
+  }
+
+  .quotaModal h2{
+    font-size:22px;
+  }
+
+  .quotaModal > p{
+    font-size:12px;
+  }
+}
