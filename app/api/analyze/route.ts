@@ -607,6 +607,40 @@ ce qui est probable,
 et ce qui reste une supposition.
 `;
 
+async function generateWithRetry(
+  ai: GoogleGenAI,
+  request: Parameters<typeof ai.models.generateContent>[0],
+  maxRetries = 2
+) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await ai.models.generateContent(request);
+    } catch (error: any) {
+      const status = error?.status;
+      const message = String(error?.message || "");
+
+      const isTemporary =
+        status === 503 ||
+        message.includes("UNAVAILABLE") ||
+        message.includes("high demand");
+
+      if (!isTemporary || attempt === maxRetries) {
+        throw error;
+      }
+
+      const delay = attempt === 0 ? 2000 : 5000;
+
+      console.log(
+        `Gemini temporairement indisponible. Nouvelle tentative dans ${delay / 1000}s...`
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  throw new Error("Gemini indisponible.");
+}
+
 async function analystCall(
   ai: GoogleGenAI,
   prompt: string,
@@ -615,7 +649,7 @@ async function analystCall(
   const relationshipInstructions =
     getRelationshipInstructions(relationshipType);
 
-  const response = await ai.models.generateContent({
+  const response = await generateWithRetry(ai, {
     model: "gemini-3.6-flash",
 
     contents: `
@@ -782,8 +816,8 @@ Les preuves doivent être aussi fidèles que possible au texte fourni.
       relationshipType as RelationshipType
     );
 
-    const finalResponse =
-      await ai.models.generateContent({
+const finalResponse =
+  await generateWithRetry(ai, {
         model: "gemini-3.6-flash",
 
         contents: `
@@ -832,27 +866,42 @@ en déclaration personnelle de son expéditeur.
       relationshipType,
       evidence: evidence.slice(0, 120),
     });
-} catch (error: any) {
-  console.error("GEMINI ERROR:", error);
+  } catch (error: any) {
+    console.error("GEMINI ERROR:", error);
 
-  if (error?.status === 429) {
+    if (error?.status === 429) {
+      return NextResponse.json(
+        {
+          error:
+            "🩺 Jean-Michel a fini sa garde pour aujourd'hui. Le quota gratuit d'analyse est épuisé. Reviens demain !",
+          code: "QUOTA_EXCEEDED",
+        },
+        { status: 429 }
+      );
+    }
+
+    if (
+      error?.status === 503 ||
+      String(error?.message || "").includes("UNAVAILABLE") ||
+      String(error?.message || "").includes("high demand")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "🩺 Jean-Michel est momentanément débordé. Gemini reçoit trop de monde en ce moment. Réessaie dans quelques instants.",
+          code: "MODEL_UNAVAILABLE",
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       {
         error:
-          "🩺 Jean-Michel a fini sa garde pour aujourd'hui. Le quota gratuit d'analyse est épuisé. Reviens demain !",
-        code: "QUOTA_EXCEEDED",
+          error?.message ||
+          "Une erreur est survenue pendant l'analyse de la conversation.",
       },
-      { status: 429 }
+      { status: 500 }
     );
   }
-
-  return NextResponse.json(
-    {
-      error:
-        error?.message ||
-        "Une erreur est survenue pendant l'analyse de la conversation.",
-    },
-    { status: 500 }
-  );
-}
 }
