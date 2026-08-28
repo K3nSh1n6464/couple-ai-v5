@@ -1,24 +1,24 @@
 import JSZip from "jszip";
-import {
-  importInstagramJson,
-  importSnapchatJson,
-  importTelegramJson,
-} from "./index";
 import type { ImportResult, UnifiedMessage } from "./types";
 
-type ZipJsonFile = {
+type ZipTextFile = {
   name: string;
   text: string;
 };
 
-async function readJsonFiles(file: File): Promise<ZipJsonFile[]> {
+async function readTextFiles(file: File): Promise<ZipTextFile[]> {
   const zip = await JSZip.loadAsync(file);
-  const result: ZipJsonFile[] = [];
+  const result: ZipTextFile[] = [];
 
   for (const name of Object.keys(zip.files)) {
     const entry = zip.files[name];
 
-    if (entry.dir || !name.toLowerCase().endsWith(".json")) continue;
+    if (entry.dir) continue;
+
+    const lower = name.toLowerCase();
+
+    // Pour WhatsApp, on cherche surtout les TXT.
+    if (!lower.endsWith(".txt")) continue;
 
     try {
       result.push({
@@ -26,94 +26,93 @@ async function readJsonFiles(file: File): Promise<ZipJsonFile[]> {
         text: await entry.async("text"),
       });
     } catch {
-      // Ignore files that cannot be decoded as text.
+      // Ignore les fichiers qui ne peuvent pas être lus.
     }
   }
 
   return result;
 }
 
-function guessPlatform(name: string, text: string) {
-  const n = name.toLowerCase();
-  const t = text.slice(0, 20000).toLowerCase();
+function parseWhatsAppText(
+  text: string
+): UnifiedMessage[] {
+  const lines = text.replace(/\r/g, "").split("\n");
 
-  if (
-    n.includes("telegram") ||
-    n.includes("result.json") ||
-    t.includes('"personal_information"') &&
-      t.includes('"chats"')
-  ) {
-    return "telegram";
-  }
+  const messages: UnifiedMessage[] = [];
 
-  if (
-    n.includes("instagram") ||
-    n.includes("messages/inbox") ||
-    n.includes("inbox") &&
-      (t.includes("sender_name") || t.includes("timestamp_ms"))
-  ) {
-    return "instagram";
-  }
+  const regs = [
+    /^\[?(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)\]?\s+-\s+([^:]+):\s?(.*)$/,
+    /^(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}),\s+(\d{1,2}:\d{2})\s+-\s+([^:]+):\s?(.*)$/,
+  ];
 
-  if (
-    n.includes("snapchat") ||
-    n.includes("saved_chat") ||
-    t.includes("saved chat history")
-  ) {
-    return "snapchat";
-  }
+  let current: UnifiedMessage | null = null;
 
-  return null;
-}
+  for (const line of lines) {
+    const match = regs
+      .map((r) => line.match(r))
+      .find(Boolean);
 
-export async function importSocialZip(
-  file: File
-): Promise<ImportResult> {
-  const files = await readJsonFiles(file);
+    if (match) {
+      if (current) {
+        messages.push(current);
+      }
 
-  const results: ImportResult[] = [];
-  const warnings: string[] = [];
-
-  for (const item of files) {
-    const platform = guessPlatform(item.name, item.text);
-
-    if (platform === "telegram") {
-      results.push(importTelegramJson(item.text, item.name));
-    } else if (platform === "instagram") {
-      results.push(importInstagramJson(item.text, item.name));
-    } else if (platform === "snapchat") {
-      results.push(importSnapchatJson(item.text, item.name));
+      current = {
+        date: `${match[1]} ${match[2]}`,
+        sender: match[3].trim(),
+        text: match[4] || "",
+        platform: "whatsapp",
+      };
+    } else if (current && line.trim()) {
+      current.text += `\n${line}`;
     }
   }
 
-  for (const result of results) {
-    warnings.push(...result.warnings);
+  if (current) {
+    messages.push(current);
   }
 
-  const messages = dedupe(
-    results.flatMap((result) => result.messages)
+  return messages.filter(
+    (m) =>
+      m.text.trim() &&
+      !m.text.includes(
+        "Messages and calls are end-to-end encrypted"
+      )
   );
+}
 
-  const platforms = [...new Set(results.map((r) => r.platform))];
+export async function importWhatsAppZip(
+  file: File
+): Promise<ImportResult> {
+  const files = await readTextFiles(file);
+
+  if (!files.length) {
+    throw new Error(
+      "Archive WhatsApp valide, mais aucun fichier TXT n'a été trouvé. Vérifie que tu as exporté la conversation avec l'option d'inclure les médias désactivée."
+    );
+  }
+
+  const allMessages: UnifiedMessage[] = [];
+
+  for (const item of files) {
+    const messages = parseWhatsAppText(item.text);
+
+    allMessages.push(...messages);
+  }
+
+  const messages = dedupe(allMessages);
 
   if (!messages.length) {
     throw new Error(
-      "Aucun fichier de conversation reconnu dans cette archive."
+      "Le ZIP contient bien un fichier TXT, mais aucun message WhatsApp exploitable n'a été trouvé."
     );
   }
 
   return {
-    platform:
-      platforms.length === 1 ? platforms[0] : "telegram",
+    platform: "whatsapp",
     messages,
-    conversations: [
-      ...new Set(
-        messages
-          .map((m) => m.conversation)
-          .filter((x): x is string => Boolean(x))
-      ),
-    ],
-    warnings,
+    conversations: [],
+    warnings: [],
   };
 }
 
@@ -121,9 +120,11 @@ function dedupe(messages: UnifiedMessage[]) {
   const seen = new Set<string>();
 
   return messages.filter((m) => {
-    const key = `${m.platform}|${m.date}|${m.sender}|${m.text}|${m.conversation ?? ""}`;
+    const key = `${m.date}|${m.sender}|${m.text}`;
 
-    if (seen.has(key)) return false;
+    if (seen.has(key)) {
+      return false;
+    }
 
     seen.add(key);
     return true;

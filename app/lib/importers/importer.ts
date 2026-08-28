@@ -1,9 +1,5 @@
-import JSZip from "jszip";
-import { importInstagramJson } from "./instagram";
-import { importSnapchatJson } from "./snapchat";
-import { importTelegramJson } from "./telegram";
 import type { ImportResult, UnifiedMessage } from "./types";
-import { importSocialZip } from "./zip";
+import { importWhatsAppZip } from "./zip";
 
 export async function importConversationFile(
   file: File
@@ -11,27 +7,7 @@ export async function importConversationFile(
   const lower = file.name.toLowerCase();
 
   if (lower.endsWith(".zip")) {
-    return importSocialZip(file);
-  }
-
-  if (lower.endsWith(".json")) {
-    const text = await file.text();
-
-    const name = lower;
-
-    if (name.includes("telegram") || name.includes("result.json")) {
-      return importTelegramJson(text, file.name);
-    }
-
-    if (
-      name.includes("instagram") ||
-      text.includes("timestamp_ms") ||
-      text.includes("sender_name")
-    ) {
-      return importInstagramJson(text, file.name);
-    }
-
-    return importSnapchatJson(text, file.name);
+    return importWhatsAppZip(file);
   }
 
   if (lower.endsWith(".txt")) {
@@ -39,7 +15,7 @@ export async function importConversationFile(
   }
 
   throw new Error(
-    "Format non reconnu. Utilise un export WhatsApp TXT/ZIP ou un export Snapchat, Instagram ou Telegram en ZIP/JSON."
+    "Format non reconnu. Utilise un export WhatsApp au format TXT ou ZIP."
   );
 }
 
@@ -59,10 +35,14 @@ async function importWhatsAppTxt(
   let current: UnifiedMessage | null = null;
 
   for (const line of lines) {
-    const match = regs.map((r) => line.match(r)).find(Boolean);
+    const match = regs
+      .map((r) => line.match(r))
+      .find(Boolean);
 
     if (match) {
-      if (current) messages.push(current);
+      if (current) {
+        messages.push(current);
+      }
 
       current = {
         date: `${match[1]} ${match[2]}`,
@@ -75,7 +55,9 @@ async function importWhatsAppTxt(
     }
   }
 
-  if (current) messages.push(current);
+  if (current) {
+    messages.push(current);
+  }
 
   const clean = messages.filter(
     (m) =>
@@ -86,7 +68,9 @@ async function importWhatsAppTxt(
   );
 
   if (!clean.length) {
-    throw new Error("Format WhatsApp non reconnu.");
+    throw new Error(
+      "Aucun message WhatsApp exploitable trouvé dans ce fichier."
+    );
   }
 
   return {
