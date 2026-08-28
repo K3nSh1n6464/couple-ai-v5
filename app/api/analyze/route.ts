@@ -688,7 +688,44 @@ ${prompt}
     }
   }
 }
+function buildCompactEvidence(evidence: any[]) {
+  const MAX_TOTAL_CHARS = 300_000;
+  const MAX_TEXT_CHARS = 600;
 
+  let totalChars = 0;
+
+  const selected: string[] = [];
+
+  for (const m of evidence.slice(0, 900)) {
+    const text = String(m?.text || "").trim();
+
+    if (!text) continue;
+
+    const compactText =
+      text.length > MAX_TEXT_CHARS
+        ? `${text.slice(0, MAX_TEXT_CHARS)}…`
+        : text;
+
+    const line =
+      `[${m?.date || ""}] ` +
+      `${m?.sender || ""} ` +
+      `[ATTRIBUTION: ${m?.attribution || "uncertain"}]: ` +
+      `${compactText}`;
+
+    if (totalChars + line.length > MAX_TOTAL_CHARS) {
+      break;
+    }
+
+    selected.push(line);
+    totalChars += line.length;
+  }
+
+  return {
+    text: selected.join("\n"),
+    count: selected.length,
+    chars: totalChars,
+  };
+}
 export async function POST(req: Request) {
   try {
     const key = process.env.GEMINI_API_KEY;
@@ -765,14 +802,13 @@ export async function POST(req: Request) {
       `Analyse Gemini : ${evidence.length} passages`
     );
 
-    const compactEvidence = evidence
-      .slice(0, 700)
-.map(
-  (m: any) =>
-    `[${m.date}] ${m.sender} [ATTRIBUTION: ${m.attribution}] [RAISON: ${m.attributionReason}]: ${m.text}`
-)
-      .join("\n");
+const compacted = buildCompactEvidence(evidence);
 
+const compactEvidence = compacted.text;
+
+console.log(
+  `Preuves Gemini : ${compacted.count} passages / ${compacted.chars} caractères`
+);
     const relationshipInstructions =
       getRelationshipInstructions(
         relationshipType as RelationshipType
