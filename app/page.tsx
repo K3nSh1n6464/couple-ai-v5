@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import JSZip from "jszip";
 import { analyzeConversation } from "./lib/analyzer";
+import { importConversationFile } from "./lib/importers/importer";
 import ExportGuide from "./components/ExportGuide";
 
 type Message = {
@@ -113,40 +113,6 @@ const RELATION_LABELS = {
   }
 >;
 
-function parseWhatsApp(text: string): Message[] {
-  const lines = text.replace(/\r/g, "").split("\n");
-  const out: Message[] = [];
-  let cur: Message | null = null;
-
-  const regs = [
-    /^\[?(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)\]?\s+-\s+([^:]+):\s?(.*)$/,
-    /^(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}),\s+(\d{1,2}:\d{2})\s+-\s+([^:]+):\s?(.*)$/,
-  ];
-
-  for (const line of lines) {
-    const m = regs.map((r) => line.match(r)).find(Boolean);
-
-    if (m) {
-      if (cur) out.push(cur);
-
-      cur = {
-        date: `${m[1]} ${m[2]}`,
-        sender: m[3].trim(),
-        text: m[4] || "",
-      };
-    } else if (cur && line.trim()) {
-      cur.text += "\n" + line;
-    }
-  }
-
-  if (cur) out.push(cur);
-
-  return out.filter(
-    (x) =>
-      x.text.trim() &&
-      !x.text.includes("Messages and calls are end-to-end encrypted")
-  );
-}
 
 function detectForwarded(text: string): boolean {
   const t = text.toLowerCase().trim();
@@ -277,26 +243,19 @@ export default function Home() {
     setProgress(0);
 
     try {
-      let text = "";
+const imported = await importConversationFile(f);
 
-      if (f.name.toLowerCase().endsWith(".zip")) {
-        const z = await JSZip.loadAsync(f);
+const parsed: Message[] = imported.messages.map((m) => ({
+  date: m.date,
+  sender: m.sender,
+  text: m.text,
+}));
 
-        for (const n of Object.keys(z.files)) {
-          if (!z.files[n].dir && n.toLowerCase().endsWith(".txt")) {
-            const t = await z.files[n].async("text");
-            if (t.length > text.length) text = t;
-          }
-        }
-      } else {
-        text = await f.text();
-      }
-
-      const parsed = parseWhatsApp(text);
-
-      if (parsed.length < 20) {
-        throw new Error("Format WhatsApp non reconnu.");
-      }
+if (parsed.length < 20) {
+  throw new Error(
+    "Conversation WhatsApp trop courte. Au moins 20 messages sont nécessaires."
+  );
+}
 
       const enriched = enrichMessages(parsed);
       setMessages(enriched);
@@ -550,7 +509,7 @@ export default function Home() {
 <b>Déposez votre export de conversation</b>
 
 <span>
-  WhatsApp · Snapchat · Instagram · Telegram
+  WhatsApp
 </span>
 
 <span>

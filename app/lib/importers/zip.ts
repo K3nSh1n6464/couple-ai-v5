@@ -1,13 +1,17 @@
 import JSZip from "jszip";
-import type { ImportResult, UnifiedMessage } from "./types";
+import type { ImportResult } from "./types";
+import { parseWhatsAppText } from "./importer";
 
 type ZipTextFile = {
   name: string;
   text: string;
 };
 
-async function readTextFiles(file: File): Promise<ZipTextFile[]> {
+async function readTextFiles(
+  file: File
+): Promise<ZipTextFile[]> {
   const zip = await JSZip.loadAsync(file);
+
   const result: ZipTextFile[] = [];
 
   for (const name of Object.keys(zip.files)) {
@@ -17,7 +21,6 @@ async function readTextFiles(file: File): Promise<ZipTextFile[]> {
 
     const lower = name.toLowerCase();
 
-    // Pour WhatsApp, on cherche surtout les TXT.
     if (!lower.endsWith(".txt")) continue;
 
     try {
@@ -26,74 +29,33 @@ async function readTextFiles(file: File): Promise<ZipTextFile[]> {
         text: await entry.async("text"),
       });
     } catch {
-      // Ignore les fichiers qui ne peuvent pas être lus.
+      // Ignore les fichiers TXT illisibles.
     }
   }
 
   return result;
 }
 
-function parseWhatsAppText(
-  text: string
-): UnifiedMessage[] {
-  const lines = text.replace(/\r/g, "").split("\n");
-
-  const messages: UnifiedMessage[] = [];
-
-const regs = [
-  /^\[?(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)\s+(matin|après-midi|apres-midi|soir|nuit)\s+-\s+([^:]+):\s?(.*)$/i,
-
-  /^(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}),\s+(\d{1,2}:\d{2}(?::\d{2})?)\s+(matin|après-midi|apres-midi|soir|nuit)\s+-\s+([^:]+):\s?(.*)$/i,
-];
-
-  let current: UnifiedMessage | null = null;
-
-  for (const line of lines) {
-    const match = regs
-      .map((r) => line.match(r))
-      .find(Boolean);
-
-    if (match) {
-      if (current) {
-        messages.push(current);
-      }
-
-current = {
-  date: `${match[1]} ${match[2]} ${match[3]}`,
-  sender: match[4].trim(),
-  text: match[5] || "",
-  platform: "whatsapp",
-};
-    } else if (current && line.trim()) {
-      current.text += `\n${line}`;
-    }
-  }
-
-  if (current) {
-    messages.push(current);
-  }
-
-  return messages.filter(
-    (m) =>
-      m.text.trim() &&
-      !m.text.includes(
-        "Messages and calls are end-to-end encrypted"
-      )
-  );
-}
-
 export async function importWhatsAppZip(
   file: File
 ): Promise<ImportResult> {
-  const files = await readTextFiles(file);
+  let files: ZipTextFile[];
 
-  if (!files.length) {
+  try {
+    files = await readTextFiles(file);
+  } catch {
     throw new Error(
-      "Archive WhatsApp valide, mais aucun fichier TXT n'a été trouvé. Vérifie que tu as exporté la conversation avec l'option d'inclure les médias désactivée."
+      "Impossible de lire cette archive ZIP. Vérifie qu'il s'agit bien d'un export WhatsApp valide."
     );
   }
 
-  const allMessages: UnifiedMessage[] = [];
+  if (!files.length) {
+    throw new Error(
+      "Le ZIP WhatsApp est valide, mais aucun fichier TXT n'a été trouvé dans l'archive."
+    );
+  }
+
+  const allMessages = [];
 
   for (const item of files) {
     const messages = parseWhatsAppText(item.text);
@@ -105,7 +67,7 @@ export async function importWhatsAppZip(
 
   if (!messages.length) {
     throw new Error(
-      "Le ZIP contient bien un fichier TXT, mais aucun message WhatsApp exploitable n'a été trouvé."
+      "Le fichier ZIP contient bien un TXT, mais aucun message WhatsApp exploitable n'a été trouvé."
     );
   }
 
@@ -117,11 +79,16 @@ export async function importWhatsAppZip(
   };
 }
 
-function dedupe(messages: UnifiedMessage[]) {
+function dedupe<T extends {
+  date: string;
+  sender: string;
+  text: string;
+}>(messages: T[]): T[] {
   const seen = new Set<string>();
 
-  return messages.filter((m) => {
-    const key = `${m.date}|${m.sender}|${m.text}`;
+  return messages.filter((message) => {
+    const key =
+      `${message.date}|${message.sender}|${message.text}`;
 
     if (seen.has(key)) {
       return false;
