@@ -161,17 +161,168 @@ function median(a: number[]) {
   return Math.round(v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2);
 }
 
-function score(m: Message) {
+function score(
+  m: Message,
+  index: number,
+  messages: Message[]
+) {
   const t = normalize(m.text);
   let s = 0;
 
+  // ─────────────────────────────
+  // 1. Importance sémantique simple
+  // ─────────────────────────────
+
   for (const k of IMPORTANT) {
-    if (t.includes(normalize(k))) s += 3;
+    if (t.includes(normalize(k))) {
+      s += 3;
+    }
   }
 
-  if (m.text.length > 180) s++;
+  // Affection explicite
+  for (const k of AFFECTION) {
+    if (t.includes(normalize(k))) {
+      s += 3;
+    }
+  }
+
+  // Conflit / tension
+  for (const k of CONFLICT) {
+    if (t.includes(normalize(k))) {
+      s += 3;
+    }
+  }
+
+  // ─────────────────────────────
+  // 2. Richesse du message
+  // ─────────────────────────────
+
+  if (m.text.length >= 80) s += 1;
+  if (m.text.length >= 180) s += 2;
+  if (m.text.length >= 350) s += 2;
+
+  // Questions importantes
+  if (/\?/.test(m.text)) s += 1;
+  if (/\?{2,}/.test(m.text)) s += 2;
+
+  // Émotions / intensité
   if (/[!?]{2,}/.test(m.text)) s += 2;
-  if (/[❤️💔🥰😘😍💕💖💋😂🤣😭🔥]/u.test(m.text)) s += 2;
+
+  if (
+    /[❤️💔🥰😘😍💕💖💋😂🤣😭🔥😡😢🫶]/u.test(
+      m.text
+    )
+  ) {
+    s += 2;
+  }
+
+  // ─────────────────────────────
+  // 3. Signaux de relation
+  // ─────────────────────────────
+
+  const relationshipSignals = [
+    "nous",
+    "on ",
+    "ensemble",
+    "avec toi",
+    "avec moi",
+    "entre nous",
+    "notre",
+    "nos ",
+    "toujours",
+    "jamais",
+    "promis",
+    "confiance",
+    "pardonne",
+    "pardon",
+    "désolé",
+    "desole",
+    "aime",
+    "manque",
+    "peur de te perdre",
+    "quitter",
+    "quitte",
+    "sépare",
+    "separe",
+  ];
+
+  for (const signal of relationshipSignals) {
+    if (t.includes(normalize(signal))) {
+      s += 2;
+    }
+  }
+
+  // ─────────────────────────────
+  // 4. Détection de changement
+  // ─────────────────────────────
+
+  const previous = messages[index - 1];
+  const next = messages[index + 1];
+
+  if (previous) {
+    const previousLength = previous.text.length;
+
+    // Réponse beaucoup plus longue ou courte
+    if (
+      previousLength > 0 &&
+      Math.abs(m.text.length - previousLength) >
+        previousLength * 1.5
+    ) {
+      s += 2;
+    }
+
+    // Changement d'expéditeur = interaction intéressante
+    if (previous.sender !== m.sender) {
+      s += 1;
+    }
+  }
+
+  if (next && next.sender !== m.sender) {
+    s += 1;
+  }
+
+  // ─────────────────────────────
+  // 5. Messages très courts mais forts
+  // ─────────────────────────────
+
+  const shortImportant = [
+    "ok",
+    "d'accord",
+    "daccord",
+    "oui",
+    "non",
+    "jamais",
+    "toujours",
+    "pourquoi",
+    "pardon",
+    "désolé",
+    "desole",
+    "je t'aime",
+    "je t’aime",
+    "tu me manques",
+    "arrête",
+    "arrete",
+    "stop",
+  ];
+
+  if (
+    m.text.trim().split(/\s+/).length <= 6 &&
+    shortImportant.some((x) =>
+      t.includes(normalize(x))
+    )
+  ) {
+    s += 4;
+  }
+
+  // ─────────────────────────────
+  // 6. Éviter les messages gigantesques
+  // ─────────────────────────────
+
+  if (m.text.length > 1200) {
+    // Ils peuvent être intéressants,
+    // mais ne doivent pas monopoliser l'échantillon.
+    s -= 2;
+  }
 
   return s;
 }
@@ -292,21 +443,87 @@ export function analyzeConversation(messages: Message[]) {
     );
   }
 
-  const evidence = messages
-    .map((m, index) => {
-      const attribution = detectAttribution(m.text);
+const scoredEvidence = messages
+  .map((m, index) => {
+    const attribution = detectAttribution(m.text);
 
-      return {
-        ...m,
-        ...attribution,
-        index,
-        score: score(m),
-      };
-    })
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 900)
-    .sort((a, b) => a.index - b.index);
+    return {
+      ...m,
+      ...attribution,
+      index,
+      score: score(m, index, messages),
+    };
+  })
+  .filter((x) => x.score > 0);
+
+const EVIDENCE_LIMIT = 900;
+
+let evidence: typeof scoredEvidence = [];
+
+if (scoredEvidence.length <= EVIDENCE_LIMIT) {
+  evidence = [...scoredEvidence];
+} else {
+  /*
+   * Sélection équilibrée dans le temps.
+   *
+   * On découpe la conversation en 3 grandes périodes
+   * et on donne à chacune une part équitable des preuves.
+   */
+  const periods = 3;
+
+  for (let period = 0; period < periods; period++) {
+    const start = Math.floor(
+      (messages.length * period) / periods
+    );
+
+    const end = Math.floor(
+      (messages.length * (period + 1)) / periods
+    );
+
+    const candidates = scoredEvidence
+      .filter(
+        (item) =>
+          item.index >= start &&
+          item.index < end
+      )
+      .sort((a, b) => b.score - a.score);
+
+    const remainingPeriods = periods - period;
+
+    const remainingSlots =
+      EVIDENCE_LIMIT - evidence.length;
+
+    const quota = Math.ceil(
+      remainingSlots / remainingPeriods
+    );
+
+    evidence.push(...candidates.slice(0, quota));
+  }
+
+  /*
+   * Si certaines périodes contiennent trop peu
+   * de preuves intéressantes, on remplit les places
+   * restantes avec les meilleurs passages globaux.
+   */
+  if (evidence.length < EVIDENCE_LIMIT) {
+    const selectedIndexes = new Set(
+      evidence.map((item) => item.index)
+    );
+
+    const remaining = scoredEvidence
+      .filter((item) => !selectedIndexes.has(item.index))
+      .sort((a, b) => b.score - a.score);
+
+    evidence.push(
+      ...remaining.slice(
+        0,
+        EVIDENCE_LIMIT - evidence.length
+      )
+    );
+  }
+
+  evidence.sort((a, b) => a.index - b.index);
+}
 
   const first = parseDate(messages[0].date);
   const last = parseDate(messages[messages.length - 1].date);
